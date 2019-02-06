@@ -1,32 +1,9 @@
-# Databricks CLI
-# Copyright 2017 Databricks, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License"), except
-# that the use of services to which certain application programming
-# interfaces (each, an "API") connect requires that the user first obtain
-# a license for the use of the APIs from Databricks, Inc. ("Databricks"),
-# by creating an account at www.databricks.com and agreeing to either (a)
-# the Community Edition Terms of Service, (b) the Databricks Terms of
-# Service, or (c) another written agreement between Licensee and Databricks
-# for the use of the APIs.
-#
-# You may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import imp
 import os
 from setuptools import setup, find_packages
 
 version = imp.load_source(
-    'mlflow.version', os.path.join('mlflow', 'version.py')).version
+    'mlflow.version', os.path.join('mlflow', 'version.py')).VERSION
 
 
 # Get a list of all files in the JS directory to include in our module
@@ -41,33 +18,35 @@ def package_files(directory):
 # Prints out a set of paths (relative to the mlflow/ directory) of files in mlflow/server/js/build
 # to include in the wheel, e.g. "../mlflow/server/js/build/index.html"
 js_files = package_files('mlflow/server/js/build')
+sagmaker_server_files = package_files("mlflow/sagemaker/container")
 
 setup(
     name='mlflow',
     version=version,
     packages=find_packages(exclude=['tests', 'tests.*']),
-    package_data={"mlflow": js_files},
+    package_data={"mlflow": js_files + sagmaker_server_files},
     install_requires=[
-        'awscli',
         'click>=6.7',
-        'databricks-cli',
+        'cloudpickle==0.6.1',
+        'databricks-cli>=0.8.0',
         'requests>=2.17.3',
         'six>=1.10.0',
-        'uuid',
-        'gitpython',
+        'gunicorn',
         'Flask',
-        'pygal',
-        'zipstream',
         'numpy',
         'pandas',
         'scipy',
         'scikit-learn',
         'python-dateutil',
-        'protobuf',
-        'gitpython',
+        'protobuf>=3.6.0',
+        'gitpython>=2.1.0',
         'pyyaml',
-        'boto3',
+        'boto3>=1.7.12',
         'querystring_parser',
+        'simplejson',
+        'mleap>=0.8.1',
+        'cloudpickle',
+        'docker>=3.6.0'
     ],
     entry_points='''
         [console_scripts]

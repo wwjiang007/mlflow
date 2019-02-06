@@ -1,3 +1,4 @@
 # Copyright 2018 Databricks, Inc.
 
-version = '0.1.0' #  NOQA
+
+VERSION = '0.8.3.dev0'

@@ -9,4 +9,6 @@ export const getExtension = (path) => {
 };
 
 export const IMAGE_EXTENSIONS = new Set(['jpg', 'bmp', 'jpeg', 'png', 'gif', 'svg']);
-export const TEXT_EXTENSIONS = new Set(['txt', 'py', 'js', 'yaml', 'json', 'csv', 'MLmodel', 'MLproject']);
+export const TEXT_EXTENSIONS = new Set(
+  ['txt', 'log', 'py', 'js', 'yaml', 'yml', 'json', 'csv', 'tsv',
+    'md', 'rst', 'MLmodel', 'MLproject']);
