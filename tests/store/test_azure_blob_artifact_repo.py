@@ -1,10 +1,12 @@
 import os
+import posixpath
 import mock
 import pytest
 
 from azure.storage.blob import Blob, BlobPrefix, BlobProperties, BlockBlobService
 
-from mlflow.store.artifact_repo import ArtifactRepository
+from mlflow.exceptions import MlflowException
+from mlflow.store.artifact_repository_registry import get_artifact_repository
 from mlflow.store.azure_blob_artifact_repo import AzureBlobArtifactRepository
 
 
@@ -45,7 +47,7 @@ def test_artifact_uri_factory(mock_client):
     # We pass in the mock_client here to clear Azure environment variables, but we don't use it;
     # We do need to set up a fake access key for the code to run though
     os.environ['AZURE_STORAGE_ACCESS_KEY'] = ''
-    repo = ArtifactRepository.from_artifact_uri(TEST_URI, mock.Mock())
+    repo = get_artifact_repository(TEST_URI)
     assert isinstance(repo, AzureBlobArtifactRepository)
     del os.environ['AZURE_STORAGE_ACCESS_KEY']
 
@@ -131,9 +133,12 @@ def test_log_artifacts(mock_client, tmpdir):
     repo.log_artifacts(parentd.strpath)
 
     mock_client.create_blob_from_path.assert_has_calls([
-        mock.call("container", TEST_ROOT_PATH + "/a.txt", parentd.strpath + "/a.txt"),
-        mock.call("container", TEST_ROOT_PATH + "/subdir/b.txt", subd.strpath + "/b.txt"),
-        mock.call("container", TEST_ROOT_PATH + "/subdir/c.txt", subd.strpath + "/c.txt"),
+        mock.call("container", TEST_ROOT_PATH + "/a.txt",
+                  os.path.normpath(parentd.strpath + "/a.txt")),
+        mock.call("container", TEST_ROOT_PATH + "/subdir/b.txt",
+                  os.path.normpath(subd.strpath + "/b.txt")),
+        mock.call("container", TEST_ROOT_PATH + "/subdir/c.txt",
+                  os.path.normpath(subd.strpath + "/c.txt")),
     ], any_order=True)
 
 
@@ -166,11 +171,11 @@ def test_download_directory_artifact_succeeds_when_artifact_root_is_not_blob_con
 
     blob_props_1 = BlobProperties()
     blob_props_1.content_length = 42
-    blob_1 = Blob(os.path.join(TEST_ROOT_PATH, file_path_1), props=blob_props_1)
+    blob_1 = Blob(posixpath.join(TEST_ROOT_PATH, file_path_1), props=blob_props_1)
 
     blob_props_2 = BlobProperties()
     blob_props_2.content_length = 42
-    blob_2 = Blob(os.path.join(TEST_ROOT_PATH, file_path_2), props=blob_props_2)
+    blob_2 = Blob(posixpath.join(TEST_ROOT_PATH, file_path_2), props=blob_props_2)
 
     def get_mock_listing(*args, **kwargs):
         """
@@ -181,7 +186,7 @@ def test_download_directory_artifact_succeeds_when_artifact_root_is_not_blob_con
         directory traversal.
         """
         # pylint: disable=unused-argument
-        if os.path.abspath(kwargs["prefix"]) == os.path.abspath(TEST_ROOT_PATH):
+        if posixpath.abspath(kwargs["prefix"]) == posixpath.abspath(TEST_ROOT_PATH):
             return MockBlobList([blob_1, blob_2])
         else:
             return MockBlobList([])
@@ -230,9 +235,9 @@ def test_download_directory_artifact_succeeds_when_artifact_root_is_blob_contain
         every level of the directory traversal.
         """
         # pylint: disable=unused-argument
-        if os.path.abspath(kwargs["prefix"]) == "/":
+        if posixpath.abspath(kwargs["prefix"]) == "/":
             return MockBlobList([dir_prefix])
-        if os.path.abspath(kwargs["prefix"]) == os.path.abspath(subdir_path):
+        if posixpath.abspath(kwargs["prefix"]) == posixpath.abspath(subdir_path):
             return MockBlobList([blob_1, blob_2])
         else:
             return MockBlobList([])
@@ -272,7 +277,7 @@ def test_download_artifact_throws_value_error_when_listed_blobs_do_not_contain_a
         directory traversal.
         """
         # pylint: disable=unused-argument
-        if os.path.abspath(kwargs["prefix"]) == os.path.abspath(TEST_ROOT_PATH):
+        if posixpath.abspath(kwargs["prefix"]) == posixpath.abspath(TEST_ROOT_PATH):
             # Return a blob that is not prefixed by the root path of the artifact store. This
             # should result in an exception being raised
             return MockBlobList([bad_blob])
@@ -281,7 +286,7 @@ def test_download_artifact_throws_value_error_when_listed_blobs_do_not_contain_a
 
     mock_client.list_blobs.side_effect = get_mock_listing
 
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(MlflowException) as exc:
         repo.download_artifacts("")
 
     assert "Azure blob does not begin with the specified artifact path" in str(exc)

@@ -94,8 +94,7 @@ class CompareRunScatter extends Component {
       tooltips.push(this.getPlotlyTooltip(index));
     });
 
-    return (<div>
-      <h2>Scatter Plot</h2>
+    return (<div className="responsive-table-container">
       <div className="container-fluid">
         <div className="row">
           <form className="col-xs-3">

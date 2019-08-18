@@ -1,6 +1,8 @@
 import { MlflowService } from './sdk/MlflowService';
 import ErrorCodes from './sdk/ErrorCodes';
 
+export const SEARCH_MAX_RESULTS = 100;
+
 export const isPendingApi = (action) => {
   return action.type.endsWith("_PENDING");
 };
@@ -77,15 +79,41 @@ export const restoreRunApi = (runUuid, id = getUUID()) => {
 };
 
 export const SEARCH_RUNS_API = 'SEARCH_RUNS_API';
-export const searchRunsApi = (experimentIds, andedExpressions, runViewType, id = getUUID()) => {
+export const searchRunsApi = (experimentIds, filter, runViewType, orderBy, id = getUUID()) => {
   return {
     type: SEARCH_RUNS_API,
     payload: wrapDeferred(MlflowService.searchRuns, {
-      experiment_ids: experimentIds, anded_expressions: andedExpressions, run_view_type: runViewType
+      experiment_ids: experimentIds,
+      filter: filter,
+      run_view_type: runViewType,
+      max_results: SEARCH_MAX_RESULTS,
+      order_by: orderBy,
     }),
     meta: { id: id },
   };
 };
+
+export const LOAD_MORE_RUNS_API = 'LOAD_MORE_RUNS_API';
+export const loadMoreRunsApi = (
+  experimentIds,
+  filter,
+  runViewType,
+  orderBy,
+  pageToken,
+  id = getUUID(),
+) => ({
+  type: LOAD_MORE_RUNS_API,
+  payload: wrapDeferred(MlflowService.searchRuns, {
+    experiment_ids: experimentIds,
+    filter: filter,
+    run_view_type: runViewType,
+    max_results: SEARCH_MAX_RESULTS,
+    order_by: orderBy,
+    page_token: pageToken,
+  }),
+  meta: { id },
+});
+
 
 export const LIST_ARTIFACTS_API = 'LIST_ARTIFACTS_API';
 export const listArtifactsApi = (runUuid, path, id = getUUID()) => {
@@ -117,6 +145,17 @@ export const setTagApi = (runUuid, tagName, tagValue, id = getUUID()) => {
       run_uuid: runUuid, key: tagName, value: tagValue
     }),
     meta: { id: id, runUuid: runUuid, key: tagName, value: tagValue },
+  };
+};
+
+export const SET_EXPERIMENT_TAG_API = 'SET_EXPERIMENT_TAG_API';
+export const setExperimentTagApi = (experimentId, tagName, tagValue, id = getUUID()) => {
+  return {
+    type: SET_EXPERIMENT_TAG_API,
+    payload: wrapDeferred(MlflowService.setExperimentTag, {
+      experiment_id: experimentId, key: tagName, value: tagValue
+    }),
+    meta: { id, experimentId, key: tagName, value: tagValue },
   };
 };
 
@@ -190,6 +229,21 @@ export class ErrorWrapper {
         const parsed = JSON.parse(responseText);
         if (parsed.error_code) {
           return responseText;
+        }
+      } catch (e) {
+        return "INTERNAL_SERVER_ERROR";
+      }
+    }
+    return "INTERNAL_SERVER_ERROR";
+  }
+
+  getMessageField() {
+    const responseText = this.xhr.responseText;
+    if (responseText) {
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed.error_code && parsed.message) {
+          return parsed.message;
         }
       } catch (e) {
         return "INTERNAL_SERVER_ERROR";
