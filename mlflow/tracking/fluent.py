@@ -106,8 +106,9 @@ def start_run(run_id=None, experiment_id=None, run_name=None, nested=False):
     # back compat for int experiment_id
     experiment_id = str(experiment_id) if isinstance(experiment_id, int) else experiment_id
     if len(_active_run_stack) > 0 and not nested:
-        raise Exception(("Run with UUID {} is already active. To start a nested " +
-                        "run, call start_run with nested=True").format(
+        raise Exception(("Run with UUID {} is already active. To start a new run, first end the " +
+                         "current run with mlflow.end_run(). To start a nested " +
+                         "run, call start_run with nested=True").format(
             _active_run_stack[0].info.run_id))
     if run_id:
         existing_run_id = run_id
@@ -119,6 +120,15 @@ def start_run(run_id=None, experiment_id=None, run_name=None, nested=False):
     if existing_run_id:
         _validate_run_id(existing_run_id)
         active_run_obj = MlflowClient().get_run(existing_run_id)
+        # Check to see if experiment_id from environment matches experiment_id from set_experiment()
+        if (_active_experiment_id is not None and
+                _active_experiment_id != active_run_obj.info.experiment_id):
+            raise MlflowException("Cannot start run with ID {} because active run ID "
+                                  "does not match environment run ID. Make sure --experiment-name "
+                                  "or --experiment-id matches experiment set with "
+                                  "set_experiment(), or just use command-line "
+                                  "arguments".format(existing_run_id))
+        # Check to see if current run isn't deleted
         if active_run_obj.info.lifecycle_stage == LifecycleStage.DELETED:
             raise MlflowException("Cannot start run with ID {} because it is in the "
                                   "deleted state.".format(existing_run_id))
@@ -161,8 +171,35 @@ atexit.register(end_run)
 
 
 def active_run():
-    """Get the currently active ``Run``, or None if no such run exists."""
+    """Get the currently active ``Run``, or None if no such run exists.
+
+    **Note**: You cannot access currently-active run attributes
+    (parameters, metrics, etc.) through the run returned by ``mlflow.active_run``. In order
+    to access such attributes, use the :py:class:`mlflow.tracking.MlflowClient` as follows:
+
+    .. code-block:: py
+
+        client = mlflow.tracking.MlflowClient()
+        data = client.get_run(mlflow.active_run().info.run_id).data
+    """
     return _active_run_stack[-1] if len(_active_run_stack) > 0 else None
+
+
+def get_run(run_id):
+    """
+    Fetch the run from backend store. The resulting :py:class:`Run <mlflow.entities.Run>`
+    contains a collection of run metadata -- :py:class:`RunInfo <mlflow.entities.RunInfo>`,
+    as well as a collection of run parameters, tags, and metrics --
+    :py:class:`RunData <mlflow.entities.RunData>`. In the case where multiple metrics with the
+    same key are logged for the run, the :py:class:`RunData <mlflow.entities.RunData>` contains
+    the most recently logged value at the largest step for each metric.
+
+    :param run_id: Unique identifier for the run.
+
+    :return: A single :py:class:`mlflow.entities.Run` object, if the run exists. Otherwise,
+                raises an exception.
+    """
+    return MlflowClient().get_run(run_id)
 
 
 def log_param(key, value):
@@ -277,6 +314,26 @@ def log_artifacts(local_dir, artifact_path=None):
     MlflowClient().log_artifacts(run_id, local_dir, artifact_path)
 
 
+def get_experiment(experiment_id):
+    """
+    Retrieve an experiment by experiment_id from the backend store
+
+    :param experiment_id: The experiment ID returned from ``create_experiment``.
+    :return: :py:class:`mlflow.entities.Experiment`
+    """
+    return MlflowClient().get_experiment(experiment_id)
+
+
+def get_experiment_by_name(name):
+    """
+    Retrieve an experiment by experiment name from the backend store
+
+    :param name: The experiment name.
+    :return: :py:class:`mlflow.entities.Experiment`
+    """
+    return MlflowClient().get_experiment_by_name(name)
+
+
 def create_experiment(name, artifact_location=None):
     """
     Create an experiment.
@@ -287,6 +344,24 @@ def create_experiment(name, artifact_location=None):
     :return: Integer ID of the created experiment.
     """
     return MlflowClient().create_experiment(name, artifact_location)
+
+
+def delete_experiment(experiment_id):
+    """
+    Delete an experiment from the backend store.
+
+    :param experiment_id: The experiment ID returned from ``create_experiment``.
+    """
+    MlflowClient().delete_experiment(experiment_id)
+
+
+def delete_run(run_id):
+    """
+    Deletes a run with the given ID.
+
+    :param run_id: Unique identifier for the run to delete.
+    """
+    MlflowClient().delete_run(run_id)
 
 
 def get_artifact_uri(artifact_path=None):
@@ -317,17 +392,18 @@ def search_runs(experiment_ids=None, filter_string="", run_view_type=ViewType.AC
 
     :param experiment_ids: List of experiment IDs. None will default to the active experiment.
     :param filter_string: Filter query string, defaults to searching all runs.
-    :param run_view_type: one of enum values ACTIVE_ONLY, DELETED_ONLY, or ALL runs
+    :param run_view_type: one of enum values ``ACTIVE_ONLY``, ``DELETED_ONLY``, or ``ALL`` runs
                             defined in :py:class:`mlflow.entities.ViewType`.
     :param max_results: The maximum number of runs to put in the dataframe. Default is 100,000
                         to avoid causing out-of-memory issues on the user's machine.
-    :param order_by: List of columns to order by (e.g., "metrics.rmse"). The default
-                        ordering is to sort by start_time DESC, then run_id.
+    :param order_by: List of columns to order by (e.g., "metrics.rmse"). The ``order_by`` column
+                     can contain an optional ``DESC`` or ``ASC`` value. The default is ``ASC``.
+                     The default ordering is to sort by ``start_time DESC``, then ``run_id``.
 
     :return: A pandas.DataFrame of runs, where each metric, parameter, and tag
         are expanded into their own columns named metrics.*, params.*, and tags.*
         respectively. For runs that don't have a particular metric, parameter, or tag, their
-        value will be (Numpy) Nan, None, or None respectively
+        value will be (NumPy) Nan, None, or None respectively.
     """
     if not experiment_ids:
         experiment_ids = _get_experiment_id()
